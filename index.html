@@ -342,20 +342,26 @@
   /* ===== PURE ARENA PLAY MODE — only the game, nothing else ===== */
   .top-actions{ display:flex; gap:8px; }
   .exit-play{ display:none; }
-  /* tiny floating HUD inside the arena (score + 2 buttons, no blur) */
+  /* tiny floating HUD inside the arena (score cards + 2 buttons, no blur) */
   .fs-hud{
-    display:none; position:absolute; top:10px; left:10px; right:10px; z-index:8;
-    align-items:center; justify-content:space-between; pointer-events:none;
+    display:none; position:absolute; z-index:8;
+    top:max(10px, env(safe-area-inset-top)); left:10px; right:10px;
+    align-items:flex-start; justify-content:space-between; pointer-events:none; gap:8px;
   }
-  .fs-hud .fs-score{
-    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px;
-    background:rgba(0,0,0,.6); color:#fff; border:1px solid rgba(255,255,255,.18);
-    padding:8px 14px; border-radius:999px; pointer-events:none;
+  .fs-pills{ display:flex; gap:6px; flex-wrap:wrap; pointer-events:none; }
+  .fs-pill{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; line-height:1;
+    background:rgba(0,0,0,.45); color:#fff; border:1px solid rgba(255,255,255,.16);
+    padding:7px 10px; border-radius:999px; pointer-events:none; white-space:nowrap;
   }
-  .fs-hud .fs-btns{ display:flex; gap:8px; pointer-events:auto; }
+  .fs-pill small{ opacity:.6; font-size:9px; letter-spacing:.08em; margin-right:4px; }
+  .fs-pill.score{ color:#bef264; }
+  .fs-pill.best{ color:#fbbf24; }
+  .fs-pill.len{ color:#67e8f9; }
+  .fs-hud .fs-btns{ display:flex; gap:8px; pointer-events:auto; flex-shrink:0; }
   .fs-hud button{
-    width:44px; height:44px; border-radius:12px; border:1px solid rgba(255,255,255,.18);
-    background:rgba(0,0,0,.6); color:#fff; font-size:17px; cursor:pointer; touch-action:manipulation;
+    width:40px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,.16);
+    background:rgba(0,0,0,.45); color:#fff; font-size:16px; cursor:pointer; touch-action:manipulation;
   }
   .fs-hud button:active{ transform:scale(.94); }
   /* when playing: hide EVERYTHING except the canvas */
@@ -377,11 +383,13 @@
     padding:0; border-radius:0; contain:layout style;
   }
   body.playing .canvas-wrap{
-    width:min(100vw, 100vh); width:min(100vw, 100dvh); height:min(100vw, 100vh); height:min(100vw, 100dvh);
-    max-width:100vmin; max-height:100vmin; margin-inline:auto;
-    border:none; border-radius:0; aspect-ratio:1/1;
+    width:100vw; height:100vh; height:100dvh; height:100svh;
+    max-width:none; max-height:none; margin:0;
+    border:none; border-radius:0; aspect-ratio:auto;
   }
   body.playing .fs-hud{ display:flex; }
+  body.playing canvas{ width:100%; height:100%; }
+  body.playing .combo{ top:60px; }
   /* native fullscreen: same pure arena, fills screen */
   .board-card:fullscreen, .board-card:-webkit-full-screen{
     width:100vw; height:100vh; height:100dvh; max-width:none; border-radius:0; padding:0;
@@ -389,8 +397,7 @@
     background:#000; border:none; overflow:hidden;
   }
   .board-card:fullscreen .canvas-wrap, .board-card:-webkit-full-screen .canvas-wrap{
-    width:min(100vw, 100vh); width:min(100vw, 100dvh);
-    height:min(100vw, 100vh); height:min(100vw, 100dvh);
+    width:100vw; height:100vh; height:100dvh;
     border:none; border-radius:0; margin:0;
   }
   .board-card:fullscreen .fs-hud, .board-card:-webkit-full-screen .fs-hud{ display:flex; }
@@ -431,7 +438,11 @@
   <div class="board-card" id="boardCard">
     <button class="exit-play" id="exitPlayBtn" style="display:none">✕ Exit</button>
     <div class="fs-hud" id="fsHud">
-      <span class="fs-score">⭐ <span id="fsScore">0</span></span>
+      <span class="fs-pills">
+        <span class="fs-pill score"><small>SCORE</small><span id="fsScore">0</span></span>
+        <span class="fs-pill best"><small>BEST</small><span id="fsBest">0</span></span>
+        <span class="fs-pill len"><small>LEN</small><span id="fsLen">3</span></span>
+      </span>
       <span class="fs-btns">
         <button id="fsPauseBtn" title="Pause">⏸</button>
         <button id="fsExitBtn" title="Exit">✕</button>
@@ -524,20 +535,42 @@
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha: false });
-  const COLS = 21, ROWS = 21;
-  const LOGICAL = 600; // logical playfield size (CSS pixels)
-  let CELL = LOGICAL / COLS;
+  const canvasWrapEl = document.getElementById('canvasWrap');
+  const COLS = 21;
+  let ROWS = 21; // dynamic: square in menu, full-screen aspect in arena
+  let LOGICAL_W = 600, LOGICAL_H = 600; // logical playfield size (CSS pixels)
+  let CELL = LOGICAL_W / COLS;
+  let bgCache = { key:'', grad:null }; // created early: setupHiDPI touches it
   const isCoarse = window.matchMedia && (window.matchMedia('(pointer:coarse)').matches || window.matchMedia('(hover:none)').matches);
   const isSmallScreen = () => Math.min(window.innerWidth, window.innerHeight) < 560 || (isCoarse && window.innerWidth < 820);
   const isMobilePerf = () => isCoarse || window.innerWidth < 560;
 
+  // Board rows follow the real screen aspect so the arena covers
+  // tall phones (e.g. Oppo A54 20:9) with zero black bars.
+  function computeArenaRows(){
+    const w = window.innerWidth || 360, h = window.innerHeight || 640;
+    ROWS = Math.max(11, Math.min(48, Math.round(COLS * h / w)));
+  }
   // HiDPI: crisp on retina phones without changing game logic
   function setupHiDPI(){
     const dpr = Math.min(window.devicePixelRatio || 1, isMobilePerf() ? 2 : 2.5);
-    canvas.width = Math.round(LOGICAL * dpr);
-    canvas.height = Math.round(LOGICAL * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    CELL = LOGICAL / COLS;
+    if(arenaMode()){
+      const w = canvasWrapEl && canvasWrapEl.clientWidth ? canvasWrapEl.clientWidth : (window.innerWidth || 360);
+      const h = canvasWrapEl && canvasWrapEl.clientHeight ? canvasWrapEl.clientHeight : (window.innerHeight || 640);
+      LOGICAL_W = Math.max(200, w);
+      CELL = LOGICAL_W / COLS;
+      LOGICAL_H = Math.max(200, ROWS * CELL);
+      canvas.width = Math.round(LOGICAL_W * dpr);
+      canvas.height = Math.round(LOGICAL_H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    } else {
+      LOGICAL_W = 600; LOGICAL_H = 600;
+      canvas.width = Math.round(LOGICAL_W * dpr);
+      canvas.height = Math.round(LOGICAL_H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      CELL = LOGICAL_W / COLS;
+    }
+    bgCache.key = ''; // size changed → rebuild bg gradient
   }
   setupHiDPI();
   let resizeT = null;
@@ -628,7 +661,11 @@
     obstacles = [];
     acc = 0; lastTick = performance.now();
     spawnFood();
-    if(obstaclesEnabled) spawnObstacles(6);
+    if(obstaclesEnabled){
+      // bigger full-screen boards get proportionally more rocks
+      const areaN = Math.round(6 * (COLS*ROWS) / 441);
+      spawnObstacles(Math.min(16, Math.max(6, areaN)));
+    }
     updateHUD();
   }
 
@@ -678,8 +715,12 @@
     lenEl.textContent = snake.length;
     const fsS = document.getElementById('fsScore');
     if(fsS) fsS.textContent = score;
+    const fsB = document.getElementById('fsBest');
+    const fsL = document.getElementById('fsLen');
     if(score > best){ best = score; localStorage.setItem('ember-serpent-best', String(best)); }
     bestEl.textContent = best;
+    if(fsB) fsB.textContent = best;
+    if(fsL) fsL.textContent = snake.length;
   }
 
   function queueDir(x,y){
@@ -790,11 +831,10 @@
   function skin(){ return SKINS[currentSkin] || SKINS.ember; }
 
   // cached bg gradient per theme (was rebuilt every frame — lag source)
-  let bgCache = { key:'', grad:null };
   function getBgGrad(th){
-    const key = currentTheme;
+    const key = currentTheme + '_' + LOGICAL_W + 'x' + LOGICAL_H;
     if(bgCache.key===key && bgCache.grad) return bgCache.grad;
-    const g = ctx.createRadialGradient(LOGICAL/2, 0, 60, LOGICAL/2, LOGICAL/2, LOGICAL*0.85);
+    const g = ctx.createRadialGradient(LOGICAL_W/2, 0, 60, LOGICAL_W/2, LOGICAL_H/2, Math.max(LOGICAL_W,LOGICAL_H)*0.85);
     g.addColorStop(0, th.board[0]);
     g.addColorStop(0.55, th.board[1]);
     g.addColorStop(1, th.board[2]);
@@ -859,12 +899,12 @@
 
     // bg — cached gradient (no per-frame rebuild)
     ctx.fillStyle = getBgGrad(th);
-    ctx.fillRect(-24, -24, LOGICAL+48, LOGICAL+48);
+    ctx.fillRect(-24, -24, LOGICAL_W+48, LOGICAL_H+48);
     // subtle grid
     ctx.strokeStyle = th.grid;
     ctx.lineWidth = 1;
-    for(let i=1;i<COLS;i++){ ctx.beginPath(); ctx.moveTo(i*CELL,0); ctx.lineTo(i*CELL,LOGICAL); ctx.stroke(); }
-    for(let j=1;j<ROWS;j++){ ctx.beginPath(); ctx.moveTo(0,j*CELL); ctx.lineTo(LOGICAL,j*CELL); ctx.stroke(); }
+    for(let i=1;i<COLS;i++){ ctx.beginPath(); ctx.moveTo(i*CELL,0); ctx.lineTo(i*CELL,LOGICAL_H); ctx.stroke(); }
+    for(let j=1;j<ROWS;j++){ ctx.beginPath(); ctx.moveTo(0,j*CELL); ctx.lineTo(LOGICAL_W,j*CELL); ctx.stroke(); }
 
     // obstacles under food/snake
     if(obstaclesEnabled && obstacles){
@@ -1075,6 +1115,9 @@
   });
 
   function start(){
+    computeArenaRows(); // tall phone → more rows, zero black bars
+    enterFocusMode();
+    setupHiDPI(); // size canvas to the real arena before spawning
     reset(); state='playing';
     startOverlay.classList.add('hidden');
     overOverlay.classList.add('hidden');
@@ -1083,7 +1126,6 @@
     sfx.click();
     const fsp = document.getElementById('fsPauseBtn');
     if(fsp) fsp.textContent = '⏸';
-    enterFocusMode();
     // true fullscreen game feeling on Play (user gesture, so allowed)
     const p = enterNativeFullscreen();
     if(p && p.catch) p.catch(()=>{});
@@ -1094,6 +1136,9 @@
     pauseOverlay.classList.add('hidden');
     startOverlay.classList.remove('hidden');
     exitFocusMode();
+    ROWS = 21; // menu board is square again
+    setupHiDPI();
+    updateHUD();
   }
   function togglePause(){
     if(state==='playing'){ state='paused'; pauseOverlay.classList.remove('hidden'); }
