@@ -536,7 +536,7 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha: false });
   const canvasWrapEl = document.getElementById('canvasWrap');
-  const COLS = 21;
+  let COLS = 21;
   let ROWS = 21; // dynamic: square in menu, full-screen aspect in arena
   let LOGICAL_W = 600, LOGICAL_H = 600; // logical playfield size (CSS pixels)
   let CELL = LOGICAL_W / COLS;
@@ -545,33 +545,41 @@
   const isSmallScreen = () => Math.min(window.innerWidth, window.innerHeight) < 560 || (isCoarse && window.innerWidth < 820);
   const isMobilePerf = () => isCoarse || window.innerWidth < 560;
 
-  // Board rows follow the real screen aspect so the arena covers
-  // tall phones (e.g. Oppo A54 20:9) with zero black bars.
-  function computeArenaRows(){
+  // Arena grid follows the real screen aspect so it covers tall
+  // phones (e.g. Oppo A54 20:9) with zero black bars. Phones get
+  // fewer, bigger columns so the snake/fruit aren't tiny and crossing
+  // the board doesn't take forever.
+  function computeArenaGrid(){
     const w = window.innerWidth || 360, h = window.innerHeight || 640;
-    ROWS = Math.max(11, Math.min(48, Math.round(COLS * h / w)));
+    COLS = w < 500 ? 15 : 21;
+    ROWS = Math.max(8, Math.min(48, Math.round(COLS * h / w)));
   }
   // HiDPI: crisp on retina phones without changing game logic
   function setupHiDPI(){
     const dpr = Math.min(window.devicePixelRatio || 1, isMobilePerf() ? 2 : 2.5);
     if(arenaMode()){
       const w = canvasWrapEl && canvasWrapEl.clientWidth ? canvasWrapEl.clientWidth : (window.innerWidth || 360);
-      const h = canvasWrapEl && canvasWrapEl.clientHeight ? canvasWrapEl.clientHeight : (window.innerHeight || 640);
       LOGICAL_W = Math.max(200, w);
       CELL = LOGICAL_W / COLS;
       LOGICAL_H = Math.max(200, ROWS * CELL);
       canvas.width = Math.round(LOGICAL_W * dpr);
       canvas.height = Math.round(LOGICAL_H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // pin the wrap to the exact backing aspect: zero browser scaling,
+      // so edge cells are never stretched/cropped and fruit stays visible
+      if(canvasWrapEl && canvasWrapEl.style) canvasWrapEl.style.height = LOGICAL_H + 'px';
     } else {
       LOGICAL_W = 600; LOGICAL_H = 600;
       canvas.width = Math.round(LOGICAL_W * dpr);
       canvas.height = Math.round(LOGICAL_H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       CELL = LOGICAL_W / COLS;
+      if(canvasWrapEl && canvasWrapEl.style) canvasWrapEl.style.height = '';
     }
     bgCache.key = ''; // size changed → rebuild bg gradient
   }
+  computeArenaGrid();
+  ROWS = COLS; // menu board is square
   setupHiDPI();
   let resizeT = null;
   window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT = setTimeout(setupHiDPI, 150); });
@@ -654,7 +662,7 @@
   function reset(){
     const cx = Math.floor(COLS/2), cy = Math.floor(ROWS/2);
     snake = [{x:cx,y:cy},{x:cx-1,y:cy},{x:cx-2,y:cy}];
-    prevSnake = JSON.parse(JSON.stringify(snake));
+    prevSnake = snake.map(s=>({x:s.x, y:s.y}));
     dir = {x:1,y:0}; dirQueue = [];
     score = 0; combo = 0; comboTimer = 0; shake = 0; hueShift = 0;
     particles = []; bonus = null; bonusTimer = 0; eatenCount = 0;
@@ -669,9 +677,13 @@
     updateHUD();
   }
 
+  // Top rows sit under the floating score pills in fullscreen — never
+  // spawn fruit/bonus/rocks there so they're always fully visible.
+  function inHudZone(y){ return arenaMode() && y < 3; }
   function spawnFood(){
     for(let tries=0; tries<200; tries++){
       const p = { x: (Math.random()*COLS)|0, y: (Math.random()*ROWS)|0 };
+      if(inHudZone(p.y)) continue;
       if(!isOccupied(p.x,p.y)){ food = p; return; }
     }
     // board nearly full — pick anything free of snake
@@ -683,6 +695,7 @@
   function spawnBonus(){
     for(let i=0;i<30;i++){
       const p = { x: (Math.random()*COLS)|0, y: (Math.random()*ROWS)|0, ttl: 420 };
+      if(inHudZone(p.y)) continue;
       if(!isOccupied(p.x,p.y)){ bonus = p; return; }
     }
   }
@@ -692,6 +705,7 @@
     while(placed < n && guard < 300){
       guard++;
       const p = { x: 1 + ((Math.random()*(COLS-2))|0), y: 1 + ((Math.random()*(ROWS-2))|0) };
+      if(inHudZone(p.y)) continue;
       if(isOccupied(p.x,p.y) || nearHead(p.x,p.y,3)) continue;
       // avoid stacking a solid wall of obstacles: limit neighbours
       const neighbours = obstacles.filter(o=>Math.abs(o.x-p.x)+Math.abs(o.y-p.y)===1).length;
@@ -1116,7 +1130,7 @@
   });
 
   function start(){
-    computeArenaRows(); // tall phone → more rows, zero black bars
+    computeArenaGrid(); // tall phone → more rows, bigger cells, zero black bars
     enterFocusMode();
     setupHiDPI(); // size canvas to the real arena before spawning
     reset(); state='playing';
@@ -1137,7 +1151,8 @@
     pauseOverlay.classList.add('hidden');
     startOverlay.classList.remove('hidden');
     exitFocusMode();
-    ROWS = 21; // menu board is square again
+    computeArenaGrid();
+    ROWS = COLS; // menu board is square again
     setupHiDPI();
     updateHUD();
   }
