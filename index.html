@@ -729,7 +729,8 @@
     if(dirQueue.length < 3){ dirQueue.push({x,y}); sfx.turn(); }
   }
 
-  const arenaMode = () => document.body.classList.contains('playing');
+  // function declaration (hoisted): setupHiDPI() runs at load, before this line
+  function arenaMode(){ return document.body.classList.contains('playing'); }
   function step(){
     // fast copy (was JSON deep-copy — major lag source)
     prevSnake = new Array(snake.length);
