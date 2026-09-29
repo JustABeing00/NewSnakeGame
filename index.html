@@ -56,8 +56,9 @@
     --accent:#bef264;
     --accent2:#4ade80;
   }
-  html{ -webkit-text-size-adjust:100%; }
-  html,body{ overscroll-behavior:none; }
+  html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; }
+  html{ overscroll-behavior-y:auto; overscroll-behavior-x:none; -webkit-overflow-scrolling:touch; }
+  body{ overscroll-behavior-x:none; -webkit-overflow-scrolling:touch; }
   body{
     font-family:'Outfit', system-ui, sans-serif;
     background: var(--bg);
@@ -78,9 +79,9 @@
     -webkit-tap-highlight-color:transparent;
     -webkit-touch-callout:none;
   }
-  /* Animated background */
-  .bg-orbs{ position:fixed; inset:0; z-index:-2; overflow:hidden; background: radial-gradient(1200px 800px at 50% -10%, #0f1f3a 0%, #05070f 60%); }
-  .orb{ position:absolute; border-radius:50%; filter:blur(90px); opacity:.55; animation: drift 14s ease-in-out infinite alternate; }
+  /* Animated background — GPU-promoted so page scroll stays smooth */
+  .bg-orbs{ position:fixed; inset:0; z-index:-2; overflow:hidden; background: radial-gradient(1200px 800px at 50% -10%, #0f1f3a 0%, #05070f 60%); transform:translateZ(0); will-change:transform; contain:strict; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(90px); opacity:.55; animation: drift 14s ease-in-out infinite alternate; will-change:transform; transform:translateZ(0); contain:strict; }
   .orb.o1{ width:520px; height:520px; background: radial-gradient(circle, #10b98155 0%, transparent 70%); top:-120px; left:-80px; }
   .orb.o2{ width:620px; height:620px; background: radial-gradient(circle, #7c3aed55 0%, transparent 70%); top:10%; right:-180px; animation-delay:-4s; }
   .orb.o3{ width:480px; height:480px; background: radial-gradient(circle, #06b6d444 0%, transparent 70%); bottom:-140px; left:30%; animation-delay:-8s; }
@@ -94,7 +95,12 @@
                       linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
     background-size:44px 44px;
     mask-image: radial-gradient(700px 600px at 50% 40%, black 30%, transparent 80%);
+    transform:translateZ(0); pointer-events:none; contain:strict;
   }
+  /* scroll perf: isolate heavy cards to their own layers */
+  .board-card, .stat, .topbar{ transform:translateZ(0); }
+  .board-card{ contain:layout style; }
+  .pick-row{ content-visibility:auto; contain-intrinsic-size:auto 120px; }
 
   .wrap{ width:100%; max-width:560px; display:flex; flex-direction:column; gap:16px; margin-inline:auto; }
   @media (max-width:560px){
@@ -333,6 +339,56 @@
     *{ scroll-behavior:auto; }
   }
 
+  /* ===== FOCUS / FULLSCREEN PLAY MODE ===== */
+  .top-actions{ display:flex; gap:8px; }
+  .exit-play{
+    display:none; position:absolute; top:12px; right:12px; z-index:8;
+    border:1px solid var(--border); background:rgba(0,0,0,.55); color:#fff;
+    border-radius:12px; padding:10px 14px; font-family:inherit; font-weight:700; font-size:13px;
+    cursor:pointer; backdrop-filter:blur(8px); touch-action:manipulation; min-height:44px;
+  }
+  .exit-play:active{ transform:scale(.96); }
+  /* when playing: hide setup UI, grow the board */
+  body.playing .setting-label,
+  body.playing #themeRow,
+  body.playing #skinRow,
+  body.playing .footer,
+  body.playing .touch-hint{ display:none; }
+  body.playing .wrap{ max-width:720px; }
+  body.playing .exit-play{ display:block; }
+  body.playing .board-card{ padding:12px; }
+  @media (min-width:561px){
+    body.playing .wrap{ max-width:min(760px, 100%); }
+    body.playing .canvas-wrap{
+      max-height:calc(100dvh - 230px);
+      max-height:calc(100vh - 230px);
+      aspect-ratio:1/1; width:100%; margin-inline:auto;
+    }
+    body.playing .dpad{ display:none; }
+  }
+  @media (max-width:560px){
+    body.playing{ padding:8px 8px 16px; }
+    body.playing .topbar{ display:none; }
+    body.playing .stats{ gap:6px; }
+    body.playing .board-card{ padding:8px; }
+    body.playing .controls{ margin-top:8px; }
+    body.playing .dpad{ margin-top:10px; }
+  }
+  /* native fullscreen: board truly fills the screen */
+  .board-card:fullscreen{
+    width:100vw; height:100dvh; max-width:none; border-radius:0; padding:10px;
+    display:flex; flex-direction:column; justify-content:center;
+    background:var(--bg); overflow-y:auto;
+  }
+  .board-card:fullscreen .canvas-wrap{
+    width:min(100%, calc(100dvh - 260px)); margin-inline:auto; flex-shrink:0;
+  }
+  .board-card:-webkit-full-screen{
+    width:100vw; height:100vh; border-radius:0; padding:10px;
+    display:flex; flex-direction:column; justify-content:center;
+  }
+  .board-card:-webkit-full-screen .canvas-wrap{ width:min(100%, calc(100vh - 260px)); margin-inline:auto; }
+
   .footer{ text-align:center; font-size:12px; opacity:.45; letter-spacing:.04em; }
   .footer b{ opacity:1; }
   .combo{
@@ -354,7 +410,10 @@
       <div class="logo-mark">🐍</div>
       <div><h1>EMBER <span>SERPENT</span></h1><p>SNAKE • REIMAGINED</p></div>
     </div>
-    <button class="sound-btn" id="soundBtn" title="Toggle sound">🔊</button>
+    <div class="top-actions">
+      <button class="sound-btn" id="fsBtn" title="Fullscreen">⛶</button>
+      <button class="sound-btn" id="soundBtn" title="Toggle sound">🔊</button>
+    </div>
   </div>
 
   <div class="stats">
@@ -363,7 +422,8 @@
     <div class="stat level"><small>LENGTH</small><div class="val" id="length">3</div></div>
   </div>
 
-  <div class="board-card">
+  <div class="board-card" id="boardCard">
+    <button class="exit-play" id="exitPlayBtn">✕ Exit</button>
     <div class="canvas-wrap" id="canvasWrap">
       <div class="combo" id="combo">+10 COMBO x2 🔥</div>
       <canvas id="game" width="600" height="600"></canvas>
@@ -373,7 +433,7 @@
         <h2>EAT.<br><span class="grad">GROW. GLOW.</span></h2>
         <p>Eat the orbs to grow. Dodge the rocky obstacles, walls and yourself. Golden orbs are worth 5× — grab them fast! New obstacles appear as you feast.</p>
         <div class="btn-row">
-          <button class="btn btn-primary" id="startBtn">▶ &nbsp;Play Now</button>
+          <button class="btn btn-primary" id="startBtn">⛶ ▶ &nbsp;Play Fullscreen</button>
         </div>
         <div class="keys-hint"><span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">←</span><span class="kbd">→</span> or <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> to move • <span class="kbd">Space</span> pause</div>
       </div>
@@ -902,6 +962,64 @@
     draw(now, alpha);
   }
 
+  // --- Focus / fullscreen play mode ---
+  const boardCard = document.getElementById('boardCard');
+  const fsBtn = document.getElementById('fsBtn');
+  const exitPlayBtn = document.getElementById('exitPlayBtn');
+  function isNativeFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function enterFocusMode(){
+    document.body.classList.add('playing');
+    // bring the big board into view smoothly (fixes "tiny screen" feel)
+    try{ wrap.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
+  }
+  function exitFocusMode(){
+    document.body.classList.remove('playing');
+    exitNativeFullscreen();
+  }
+  function enterNativeFullscreen(){
+    try{
+      const el = boardCard;
+      if(el.requestFullscreen) return el.requestFullscreen({navigationUI:'hide'});
+      if(el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+      if(document.documentElement.requestFullscreen) return document.documentElement.requestFullscreen();
+    }catch(e){}
+    return null;
+  }
+  function exitNativeFullscreen(){
+    try{
+      if(document.exitFullscreen && document.fullscreenElement) document.exitFullscreen();
+      else if(document.webkitExitFullscreen && document.webkitFullscreenElement) document.webkitExitFullscreen();
+    }catch(e){}
+  }
+  function syncFsBtn(){ if(fsBtn) fsBtn.textContent = isNativeFullscreen() ? '🗗' : '⛶'; }
+  document.addEventListener('fullscreenchange', syncFsBtn);
+  document.addEventListener('webkitfullscreenchange', syncFsBtn);
+  if(fsBtn){
+    fsBtn.onclick = ()=>{
+      unlockAudio(); sfx.click();
+      if(isNativeFullscreen()){ exitNativeFullscreen(); }
+      else{
+        enterFocusMode();
+        const p = enterNativeFullscreen();
+        // iOS Safari has no element fullscreen — focus mode is the fallback
+        if(p && p.catch) p.catch(()=>{});
+      }
+    };
+  }
+  if(exitPlayBtn){
+    exitPlayBtn.onclick = ()=>{
+      sfx.click();
+      exitFocusMode();
+      try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+    };
+  }
+  // Esc should leave focus mode too (in addition to native fullscreen)
+  window.addEventListener('keydown', e=>{
+    if(e.key==='Escape' && document.body.classList.contains('playing') && !isNativeFullscreen()){
+      exitFocusMode();
+    }
+  });
+
   function start(){
     reset(); state='playing';
     startOverlay.classList.add('hidden');
@@ -909,6 +1027,17 @@
     pauseOverlay.classList.add('hidden');
     lastTick = performance.now(); acc=0;
     sfx.click();
+    enterFocusMode();
+    // true fullscreen game feeling on Play (user gesture, so allowed)
+    const p = enterNativeFullscreen();
+    if(p && p.catch) p.catch(()=>{});
+  }
+  function goMenu(){
+    state='menu';
+    overOverlay.classList.add('hidden');
+    pauseOverlay.classList.add('hidden');
+    startOverlay.classList.remove('hidden');
+    exitFocusMode();
   }
   function togglePause(){
     if(state==='playing'){ state='paused'; pauseOverlay.classList.remove('hidden'); }
@@ -991,7 +1120,7 @@
   // buttons
   document.getElementById('startBtn').onclick = start;
   document.getElementById('retryBtn').onclick = start;
-  document.getElementById('menuBtn').onclick = ()=>{ state='menu'; overOverlay.classList.add('hidden'); startOverlay.classList.remove('hidden'); };
+  document.getElementById('menuBtn').onclick = goMenu;
   document.getElementById('resumeBtn').onclick = togglePause;
   document.getElementById('restartBtn').onclick = start;
   document.getElementById('restartBtn2').onclick = ()=>{ if(state!=='menu') start(); };
