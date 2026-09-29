@@ -339,55 +339,61 @@
     *{ scroll-behavior:auto; }
   }
 
-  /* ===== FOCUS / FULLSCREEN PLAY MODE ===== */
+  /* ===== PURE ARENA PLAY MODE — only the game, nothing else ===== */
   .top-actions{ display:flex; gap:8px; }
-  .exit-play{
-    display:none; position:absolute; top:12px; right:12px; z-index:8;
-    border:1px solid var(--border); background:rgba(0,0,0,.55); color:#fff;
-    border-radius:12px; padding:10px 14px; font-family:inherit; font-weight:700; font-size:13px;
-    cursor:pointer; backdrop-filter:blur(8px); touch-action:manipulation; min-height:44px;
+  .exit-play{ display:none; }
+  /* tiny floating HUD inside the arena (score + 2 buttons, no blur) */
+  .fs-hud{
+    display:none; position:absolute; top:10px; left:10px; right:10px; z-index:8;
+    align-items:center; justify-content:space-between; pointer-events:none;
   }
-  .exit-play:active{ transform:scale(.96); }
-  /* when playing: hide setup UI, grow the board */
+  .fs-hud .fs-score{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px;
+    background:rgba(0,0,0,.6); color:#fff; border:1px solid rgba(255,255,255,.18);
+    padding:8px 14px; border-radius:999px; pointer-events:none;
+  }
+  .fs-hud .fs-btns{ display:flex; gap:8px; pointer-events:auto; }
+  .fs-hud button{
+    width:44px; height:44px; border-radius:12px; border:1px solid rgba(255,255,255,.18);
+    background:rgba(0,0,0,.6); color:#fff; font-size:17px; cursor:pointer; touch-action:manipulation;
+  }
+  .fs-hud button:active{ transform:scale(.94); }
+  /* when playing: hide EVERYTHING except the canvas */
+  body.playing{ padding:0; overflow:hidden; height:100vh; height:100dvh; align-items:center; justify-content:center; }
+  body.playing .bg-orbs, body.playing .grid-bg{ display:none; }
+  body.playing .topbar,
+  body.playing .stats,
+  body.playing .controls,
   body.playing .setting-label,
   body.playing #themeRow,
   body.playing #skinRow,
   body.playing .footer,
-  body.playing .touch-hint{ display:none; }
-  body.playing .wrap{ max-width:720px; }
-  body.playing .exit-play{ display:block; }
-  body.playing .board-card{ padding:12px; }
-  @media (min-width:561px){
-    body.playing .wrap{ max-width:min(760px, 100%); }
-    body.playing .canvas-wrap{
-      max-height:calc(100dvh - 230px);
-      max-height:calc(100vh - 230px);
-      aspect-ratio:1/1; width:100%; margin-inline:auto;
-    }
-    body.playing .dpad{ display:none; }
+  body.playing .touch-hint,
+  body.playing .dpad,
+  body.playing .exit-play{ display:none !important; }
+  body.playing .wrap{ max-width:none; width:100%; gap:0; margin:0; }
+  body.playing .board-card{
+    background:none; border:none; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none;
+    padding:0; border-radius:0; contain:layout style;
   }
-  @media (max-width:560px){
-    body.playing{ padding:8px 8px 16px; }
-    body.playing .topbar{ display:none; }
-    body.playing .stats{ gap:6px; }
-    body.playing .board-card{ padding:8px; }
-    body.playing .controls{ margin-top:8px; }
-    body.playing .dpad{ margin-top:10px; }
+  body.playing .canvas-wrap{
+    width:min(100vw, 100vh); width:min(100vw, 100dvh); height:min(100vw, 100vh); height:min(100vw, 100dvh);
+    max-width:100vmin; max-height:100vmin; margin-inline:auto;
+    border:none; border-radius:0; aspect-ratio:1/1;
   }
-  /* native fullscreen: board truly fills the screen */
-  .board-card:fullscreen{
-    width:100vw; height:100dvh; max-width:none; border-radius:0; padding:10px;
-    display:flex; flex-direction:column; justify-content:center;
-    background:var(--bg); overflow-y:auto;
+  body.playing .fs-hud{ display:flex; }
+  /* native fullscreen: same pure arena, fills screen */
+  .board-card:fullscreen, .board-card:-webkit-full-screen{
+    width:100vw; height:100vh; height:100dvh; max-width:none; border-radius:0; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    background:#000; border:none; overflow:hidden;
   }
-  .board-card:fullscreen .canvas-wrap{
-    width:min(100%, calc(100dvh - 260px)); margin-inline:auto; flex-shrink:0;
+  .board-card:fullscreen .canvas-wrap, .board-card:-webkit-full-screen .canvas-wrap{
+    width:min(100vw, 100vh); width:min(100vw, 100dvh);
+    height:min(100vw, 100vh); height:min(100vw, 100dvh);
+    border:none; border-radius:0; margin:0;
   }
-  .board-card:-webkit-full-screen{
-    width:100vw; height:100vh; border-radius:0; padding:10px;
-    display:flex; flex-direction:column; justify-content:center;
-  }
-  .board-card:-webkit-full-screen .canvas-wrap{ width:min(100%, calc(100vh - 260px)); margin-inline:auto; }
+  .board-card:fullscreen .fs-hud, .board-card:-webkit-full-screen .fs-hud{ display:flex; }
 
   .footer{ text-align:center; font-size:12px; opacity:.45; letter-spacing:.04em; }
   .footer b{ opacity:1; }
@@ -423,7 +429,14 @@
   </div>
 
   <div class="board-card" id="boardCard">
-    <button class="exit-play" id="exitPlayBtn">✕ Exit</button>
+    <button class="exit-play" id="exitPlayBtn" style="display:none">✕ Exit</button>
+    <div class="fs-hud" id="fsHud">
+      <span class="fs-score">⭐ <span id="fsScore">0</span></span>
+      <span class="fs-btns">
+        <button id="fsPauseBtn" title="Pause">⏸</button>
+        <button id="fsExitBtn" title="Exit">✕</button>
+      </span>
+    </div>
     <div class="canvas-wrap" id="canvasWrap">
       <div class="combo" id="combo">+10 COMBO x2 🔥</div>
       <canvas id="game" width="600" height="600"></canvas>
@@ -663,6 +676,8 @@
   function updateHUD(){
     scoreEl.textContent = score;
     lenEl.textContent = snake.length;
+    const fsS = document.getElementById('fsScore');
+    if(fsS) fsS.textContent = score;
     if(score > best){ best = score; localStorage.setItem('ember-serpent-best', String(best)); }
     bestEl.textContent = best;
   }
@@ -673,8 +688,11 @@
     if(dirQueue.length < 3){ dirQueue.push({x,y}); sfx.turn(); }
   }
 
+  const arenaMode = () => document.body.classList.contains('playing');
   function step(){
-    prevSnake = JSON.parse(JSON.stringify(snake));
+    // fast copy (was JSON deep-copy — major lag source)
+    prevSnake = new Array(snake.length);
+    for(let k=0;k<snake.length;k++) prevSnake[k] = {x:snake[k].x, y:snake[k].y};
     if(dirQueue.length) dir = dirQueue.shift();
     let head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
 
@@ -743,10 +761,11 @@
   }
 
   function burst(x,y,color,n){
-    // fewer particles on mobile GPUs for smooth 60fps
+    // fewer particles on mobile GPUs + arena mode for smooth 60fps
     if(isMobilePerf()) n = Math.max(6, Math.ceil(n*0.55));
+    if(arenaMode()) n = Math.max(4, Math.ceil(n*0.5));
     // cap total particles so old phones don't choke
-    if(particles.length > 220) particles.splice(0, particles.length-220);
+    if(particles.length > 160) particles.splice(0, particles.length-160);
     for(let i=0;i<n;i++){
       const a = Math.random()*Math.PI*2, sp = 1+Math.random()*4;
       particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,decay:0.02+Math.random()*0.03,color,r:2+Math.random()*3});
@@ -770,11 +789,34 @@
   function theme(){ return THEMES[currentTheme] || THEMES.sunset; }
   function skin(){ return SKINS[currentSkin] || SKINS.ember; }
 
+  // cached bg gradient per theme (was rebuilt every frame — lag source)
+  let bgCache = { key:'', grad:null };
+  function getBgGrad(th){
+    const key = currentTheme;
+    if(bgCache.key===key && bgCache.grad) return bgCache.grad;
+    const g = ctx.createRadialGradient(LOGICAL/2, 0, 60, LOGICAL/2, LOGICAL/2, LOGICAL*0.85);
+    g.addColorStop(0, th.board[0]);
+    g.addColorStop(0.55, th.board[1]);
+    g.addColorStop(1, th.board[2]);
+    bgCache = { key, grad:g };
+    return g;
+  }
+
   function drawObstacle(o){
     const th = theme();
+    const fast = arenaMode(); // arena: flat + minimal = 60fps
     const x = o.x*CELL, y = o.y*CELL;
     const pad = CELL*0.08;
-    // base rock
+    if(fast){
+      ctx.fillStyle = th.obstacle[1];
+      roundRect(x+pad, y+pad, CELL-pad*2, CELL-pad*2, CELL*0.28);
+      ctx.fill();
+      ctx.strokeStyle = th.obstacleEdge;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
+    // base rock (menu mode: pretty gradient)
     const g = ctx.createLinearGradient(x,y,x+CELL,y+CELL);
     g.addColorStop(0, th.obstacle[0]);
     g.addColorStop(1, th.obstacle[1]);
@@ -815,12 +857,8 @@
     ctx.save();
     if(shake>0){ ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake*=0.88; if(shake<0.4) shake=0; }
 
-    // bg — theme gradient painted on canvas (so it matches regardless of CSS)
-    const bgGrad = ctx.createRadialGradient(LOGICAL/2, 0, 60, LOGICAL/2, LOGICAL/2, LOGICAL*0.85);
-    bgGrad.addColorStop(0, th.board[0]);
-    bgGrad.addColorStop(0.55, th.board[1]);
-    bgGrad.addColorStop(1, th.board[2]);
-    ctx.fillStyle = bgGrad;
+    // bg — cached gradient (no per-frame rebuild)
+    ctx.fillStyle = getBgGrad(th);
     ctx.fillRect(-24, -24, LOGICAL+48, LOGICAL+48);
     // subtle grid
     ctx.strokeStyle = th.grid;
@@ -852,14 +890,19 @@
       }
     }
 
-    // particles
-    particles = particles.filter(p=>p.life>0);
-    for(const p of particles){
+    // particles — in-place compaction (no array alloc per frame)
+    let w = 0;
+    for(let pi=0; pi<particles.length; pi++){
+      const p = particles[pi];
       p.x+=p.vx; p.y+=p.vy; p.vx*=0.97; p.vy*=0.97; p.life-=p.decay;
-      ctx.globalAlpha = Math.max(p.life,0);
-      ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life+0.5,0,Math.PI*2); ctx.fill();
+      if(p.life>0){
+        particles[w++] = p;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life+0.5,0,Math.PI*2); ctx.fill();
+      }
     }
+    particles.length = w;
     ctx.globalAlpha = 1;
 
     // snake — interpolated for buttery motion, skin-aware
@@ -880,7 +923,8 @@
       const x = ix+off, y = iy+off;
 
       if(i===0){
-        ctx.shadowColor = sk.glow; ctx.shadowBlur = isMobilePerf() ? 10 : 24;
+        // arena = no shadowBlur (biggest fps win), menu keeps glow
+        ctx.shadowColor = sk.glow; ctx.shadowBlur = arenaMode() ? 0 : (isMobilePerf() ? 10 : 24);
         const g = ctx.createLinearGradient(x,y,x+size,y+size);
         g.addColorStop(0, sk.head[0]); g.addColorStop(0.45, sk.head[1]); g.addColorStop(1, sk.head[2]);
         ctx.fillStyle = g;
@@ -906,7 +950,7 @@
         ctx.beginPath(); ctx.arc(e1x+1,e1y-1,size*0.035,0,Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(e2x+1,e2y-1,size*0.035,0,Math.PI*2); ctx.fill();
       } else {
-        ctx.shadowColor = sk.glow; ctx.shadowBlur = (isMobilePerf() ? 5 : 12)*(1-t);
+        ctx.shadowColor = sk.glow; ctx.shadowBlur = arenaMode() ? 0 : (isMobilePerf() ? 5 : 12)*(1-t);
         ctx.fillStyle = sk.body(t);
         roundRect(x,y,size,size,size*0.42); ctx.fill();
         ctx.shadowBlur = 0;
@@ -930,7 +974,7 @@
   function drawOrb(gx,gy,scale,colors,glow,star=false){
     const cx = cellCX(gx), cy = cellCY(gy);
     const r = CELL*0.30*scale;
-    if(glow){ ctx.shadowColor = colors[1]; ctx.shadowBlur = isMobilePerf() ? 12 : 26; }
+    if(glow){ ctx.shadowColor = colors[1]; ctx.shadowBlur = arenaMode() ? 0 : (isMobilePerf() ? 12 : 26); }
     const g = ctx.createRadialGradient(cx-r*0.3,cy-r*0.35,r*0.1,cx,cy,r);
     g.addColorStop(0,'#ffffff'); g.addColorStop(0.3,colors[0]); g.addColorStop(0.65,colors[1]); g.addColorStop(1,colors[2]);
     ctx.fillStyle = g;
@@ -1006,11 +1050,21 @@
       }
     };
   }
-  if(exitPlayBtn){
-    exitPlayBtn.onclick = ()=>{
-      sfx.click();
-      exitFocusMode();
-      try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+  function exitToMenu(){
+    sfx.click();
+    exitFocusMode();
+    try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+  }
+  if(exitPlayBtn){ exitPlayBtn.onclick = exitToMenu; }
+  const fsExitBtn = document.getElementById('fsExitBtn');
+  if(fsExitBtn){ fsExitBtn.onclick = ()=>{ goMenu(); try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); } }; }
+  const fsPauseBtn = document.getElementById('fsPauseBtn');
+  if(fsPauseBtn){
+    fsPauseBtn.onclick = ()=>{
+      if(state==='playing'||state==='paused'){
+        togglePause();
+        fsPauseBtn.textContent = state==='paused' ? '▶' : '⏸';
+      }
     };
   }
   // Esc should leave focus mode too (in addition to native fullscreen)
@@ -1027,6 +1081,8 @@
     pauseOverlay.classList.add('hidden');
     lastTick = performance.now(); acc=0;
     sfx.click();
+    const fsp = document.getElementById('fsPauseBtn');
+    if(fsp) fsp.textContent = '⏸';
     enterFocusMode();
     // true fullscreen game feeling on Play (user gesture, so allowed)
     const p = enterNativeFullscreen();
